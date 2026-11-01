@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>植物細胞滲透作用互動模擬</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+        }
+        /* 自定義按鈕陰影與過渡效果 */
+        .btn-custom {
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .btn-custom:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px -1px rgba(0, 0, 0, 0.15), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
+        }
+        .btn-custom:active {
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col justify-between">
+
+    <!-- 頂部標題區 -->
+    <header class="bg-emerald-700 text-white shadow-md py-4 px-6">
+        <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center">
+            <div class="flex flex-col md:flex-row md:items-baseline gap-2 w-full md:w-auto justify-between">
+                <div class="flex items-center gap-3">
+                    <h1 class="text-2xl font-bold flex items-center gap-2">
+                        🌿 植物細胞滲透作用互動模擬
+                    </h1>
+                    <!-- 署名標籤 -->
+                    <span class="bg-emerald-800/80 text-emerald-100 text-xs px-2.5 py-1 rounded-full border border-emerald-600 font-medium">
+                        S4C12 鄺晞彤
+                    </span>
+                </div>
+                <p class="w-full text-emerald-100 text-sm mt-1 md:mt-0 md:hidden">探索低滲與高滲環境下，水分子進出植物細胞及質壁分離現象</p>
+            </div>
+            <div class="hidden md:block text-emerald-100 text-sm mt-1 md:mt-0">
+                探索低滲與高滲環境下，水分子進出植物細胞及質壁分離現象
+            </div>
+            <div class="mt-2 md:mt-0 bg-emerald-800/60 px-3 py-1.5 rounded-lg text-xs border border-emerald-600">
+                狀態：<span id="badge-status" class="font-bold text-emerald-200">低滲溶液 (Hypotonic)</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要內容區 -->
+    <main class="max-w-6xl mx-auto w-full p-4 md:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6 flex-grow items-start">
+        
+        <!-- 左側與中間：模擬顯微鏡視野畫布 -->
+        <div class="lg:col-span-2 flex flex-col gap-4">
+            <div class="bg-white rounded-2xl shadow-lg border border-slate-200 p-4 relative overflow-hidden flex flex-col items-center">
+                <div class="w-full flex justify-between items-center mb-2 px-2">
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">生物課本對照視窗 (Textbook Style View)</span>
+                    <div class="flex items-center gap-3 text-xs">
+                        <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-blue-500 inline-block"></span> 水分子</span>
+                        <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-amber-500 inline-block"></span> 蔗糖分子</span>
+                        <span class="flex items-center gap-1"><span class="w-3 h-1 bg-cyan-400 inline-block"></span> 水流淨移動</span>
+                    </div>
+                </div>
+
+                <!-- Canvas 畫布容器 -->
+                <div class="relative w-full aspect-[4/3] bg-slate-900 rounded-xl overflow-hidden border border-slate-300 shadow-inner">
+                    <canvas id="simulationCanvas" class="w-full h-full block"></canvas>
+                    
+                    <!-- 浮動提示圖層 -->
+                    <div id="canvas-overlay" class="absolute bottom-3 left-3 bg-slate-900/85 backdrop-blur-md text-white text-xs px-3 py-1.5 rounded-lg border border-slate-700 pointer-events-none transition-all duration-300">
+                        💧 水分子持續淨流入細胞 (外界高水勢 ➔ 內部低水勢)
+                    </div>
+                </div>
+
+                <!-- 濃度調節滑桿面板 -->
+                <div class="w-full bg-slate-100 p-4 rounded-xl mt-4 border border-slate-200 flex flex-col gap-2">
+                    <div class="flex justify-between items-center">
+                        <label for="concSlider" class="font-bold text-slate-700 flex items-center gap-2">
+                            🧪 外界蔗糖溶液濃度 (Concentration):
+                            <span id="conc-val-display" class="text-emerald-600 font-extrabold text-lg">0.00 M</span>
+                        </label>
+                        <span id="water-potential-indicator" class="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">
+                            外界水勢 > 細胞質水勢
+                        </span>
+                    </div>
+                    
+                    <!-- 滑桿本體 (0.00 M 到 0.50 M) -->
+                    <input type="range" id="concSlider" min="0.00" max="0.50" step="0.01" value="0.00"
+                           class="w-full h-2.5 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-emerald-600 focus:outline-none"
+                           oninput="onSliderChange(this.value)">
+
+                    <div class="flex justify-between text-xs text-slate-500 font-medium px-1">
+                        <span>0.00 M (低滲 - 細胞壓向細胞壁)</span>
+                        <span>0.25 M (等滲 - 體積不變)</span>
+                        <span>0.50 M (高滲 - 質壁分離軟縮)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右側：狀態說明與知識點面板 -->
+        <div class="flex flex-col gap-4">
+            <div class="bg-white rounded-2xl shadow-lg border border-slate-200 p-6 flex flex-col gap-4">
+                <h2 class="text-lg font-bold text-slate-800 border-b pb-2 flex items-center gap-2">
+                    📖 生理狀態與原理觀察
+                </h2>
+
+                <!-- 狀態說明動態文字框 -->
+                <div id="status-box" class="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-r-xl transition-all duration-300">
+                    <h3 id="status-title" class="font-bold text-emerald-900 text-base mb-1">低滲溶液環境 (Hypotonic Solution)</h3>
+                    <p id="status-desc" class="text-emerald-800 text-sm leading-relaxed">
+                        外界蔗糖濃度極低，水勢高於細胞內部。水分子持續淨流入細胞，大型液泡明顯擴大，細胞質被強烈壓向細胞壁，使細胞處於充血膨脹狀態（Turgid）。
+                    </p>
+                </div>
+
+                <!-- 核心指標統計 -->
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                        <span class="text-slate-500 block">水分子淨移動方向</span>
+                        <strong id="stat-net-flow" class="text-emerald-600 text-sm">淨流入 ➔ 細胞內</strong>
+                    </div>
+                    <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                        <span class="text-slate-500 block">細胞生理狀態</span>
+                        <strong id="stat-cell-state" class="text-emerald-600 text-sm">極度膨脹狀態 (Turgid)</strong>
+                    </div>
+                </div>
+
+                <!-- 核心知識點卡片 -->
+                <div class="space-y-3 text-sm text-slate-600">
+                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <h4 class="font-bold text-slate-700 mb-1">🔍 質壁分離（Plasmolysis）機制</h4>
+                        <p class="text-xs leading-relaxed">僅在濃度拉高至高滲（近 0.50 M）時發生。細胞失水，液泡顯著縮小，柔韌的細胞膜大幅向內收縮扯離堅硬的細胞壁。</p>
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <h4 class="font-bold text-slate-700 mb-1">⚖️ 等滲與低滲膨壓差別</h4>
+                        <p class="text-xs leading-relaxed">等滲時細胞膜剛好緊貼細胞壁（維持正常無膨壓）；低滲時液泡膨大並擠壓細胞質，向細胞壁施加強大的細胞膨壓。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- 頁尾 -->
+    <footer class="bg-slate-200 text-slate-600 text-center py-4 text-xs mt-6">
+        植物細胞滲透作用互動教材 &copy; 2026 | 符合中學生物學課本課程標準
+    </footer>
+
+    <!-- JavaScript 模擬與動畫核心邏輯 -->
+    <script>
+        const canvas = document.getElementById('simulationCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 當前濃度值 (0.00 M - 0.50 M)
+        let currentConc = 0.00;
+
+        // 粒子系統與箭頭動畫計數
+        let waterParticles = [];
+        let sucroseParticles = [];
+        let arrowOffset = 0; // 箭頭循環動畫計數器
+        const numWaterParticles = 75;
+
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // 初始化粒子
+        function initParticles() {
+            waterParticles = [];
+            for (let i = 0; i < numWaterParticles; i++) {
+                waterParticles.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    vx: (Math.random() - 0.5) * 1.5,
+                    vy: (Math.random() - 0.5) * 1.5,
+                    size: 3.5
+                });
+            }
+            updateSucroseParticles();
+        }
+
+        // 根據蔗糖濃度動態調整蔗糖粒子數量
+        function updateSucroseParticles() {
+            const targetCount = Math.floor(currentConc * 120);
+            while (sucroseParticles.length < targetCount) {
+                let angle = Math.random() * Math.PI * 2;
+                let dist = 120 + Math.random() * 120;
+                sucroseParticles.push({
+                    x: canvas.width / 2 + Math.cos(angle) * dist,
+                    y: canvas.height / 2 + Math.sin(angle) * dist,
+                    vx: (Math.random() - 0.5) * 1.2,
+                    vy: (Math.random() - 0.5) * 1.2,
+                    size: 6
+                });
+            }
+            if (sucroseParticles.length > targetCount) {
+                sucroseParticles.splice(targetCount);
+            }
+        }
+
+        // 當滑桿數值變動時呼叫
+        function onSliderChange(val) {
+            currentConc = parseFloat(val);
+            const concDisplay = document.getElementById('conc-val-display');
+            if (concDisplay) concDisplay.textContent = currentConc.toFixed(2) + ' M';
+            updateSucroseParticles();
+
+            // 更新 UI 資訊
+            const badge = document.getElementById('badge-status');
+            const wpIndicator = document.getElementById('water-potential-indicator');
+            const statusBox = document.getElementById('status-box');
+            const statusTitle = document.getElementById('status-title');
+            const statusDesc = document.getElementById('status-desc');
+            const overlay = document.getElementById('canvas-overlay');
+            const statFlow = document.getElementById('stat-net-flow');
+            const statState = document.getElementById('stat-cell-state');
+            const slider = document.getElementById('concSlider');
+
+            // 低滲狀態 (< 0.20M)
+            if (currentConc < 0.20) {
+                if (badge) {
+                    badge.textContent = '低滲溶液 (Hypotonic)';
+                    badge.className = 'font-bold text-emerald-200';
+                }
+                if (wpIndicator) {
+                    wpIndicator.textContent = '外界水勢 > 細胞質水勢';
+                    wpIndicator.className = 'text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800';
+                }
+                if (statusBox) statusBox.className = 'bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-r-xl transition-all duration-300';
+                if (statusTitle) {
+                    statusTitle.textContent = '低滲溶液環境 (Hypotonic Solution)';
+                    statusTitle.className = 'font-bold text-emerald-900 text-base mb-1';
+                }
+                if (statusDesc) statusDesc.textContent = '水分子進入細胞。細胞質膨脹並壓向細胞壁，細胞壁產生壓力阻止水繼續進入，最終水停止進入，細胞處於膨脹狀態。';
+                if (overlay) overlay.textContent = '💧 水分子持續淨流入細胞 (外界高水勢 ➔ 內部低水勢)';
+                
+                if (statFlow) {
+                    statFlow.textContent = '淨流入 ➔ 細胞內';
+                    statFlow.className = 'text-emerald-600 text-sm font-bold';
+                }
+                if (statState) {
+                    statState.textContent = '細胞質壓向細胞壁 (膨脹)';
+                    statState.className = 'text-emerald-600 text-sm font-bold';
+                }
+                if (slider) slider.className = 'w-full h-2.5 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-emerald-600 focus:outline-none';
+            } 
+            // 等滲狀態 (0.20M ~ 0.30M)
+            else if (currentConc >= 0.20 && currentConc <= 0.30) {
+                if (badge) {
+                    badge.textContent = '等滲溶液 (Isotonic)';
+                    badge.className = 'font-bold text-sky-200';
+                }
+                if (wpIndicator) {
+                    wpIndicator.textContent = '外界水勢 ＝ 細胞質水勢';
+                    wpIndicator.className = 'text-xs font-semibold px-2.5 py-1 rounded-full bg-sky-100 text-sky-800';
+                }
+                if (statusBox) statusBox.className = 'bg-sky-50 border-l-4 border-sky-500 p-4 rounded-r-xl transition-all duration-300';
+                if (statusTitle) {
+                    statusTitle.textContent = '等滲溶液環境 (Isotonic Solution)';
+                    statusTitle.className = 'font-bold text-sky-900 text-base mb-1';
+                }
+                if (statusDesc) statusDesc.textContent = '水分子沒有淨移動，細胞的體積不變。細胞膜剛好緊貼細胞壁內側。';
+                if (overlay) overlay.textContent = '⚖️ 水分子沒有淨移動 (進出平衡)';
+
+                if (statFlow) {
+                    statFlow.textContent = '沒有淨移動';
+                    statFlow.className = 'text-sky-600 text-sm font-bold';
+                }
+                if (statState) {
+                    statState.textContent = '體積不變';
+                    statState.className = 'text-sky-600 text-sm font-bold';
+                }
+                if (slider) slider.className = 'w-full h-2.5 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-sky-600 focus:outline-none';
+            } 
+            // 高滲狀態 (> 0.30M)
+            else {
+                if (badge) {
+                    badge.textContent = '高滲溶液 (Hypertonic)';
+                    badge.className = 'font-bold text-amber-200';
+                }
+                if (wpIndicator) {
+                    wpIndicator.textContent = '外界水勢 < 細胞質水勢';
+                    wpIndicator.className = 'text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800';
+                }
+                if (statusBox) statusBox.className = 'bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-xl transition-all duration-300';
+                if (statusTitle) {
+                    statusTitle.textContent = '高滲溶液環境 (Hypertonic Solution)';
+                    statusTitle.className = 'font-bold text-amber-900 text-base mb-1';
+                }
+                if (statusDesc) statusDesc.textContent = '水分子離開細胞。細胞質不再壓向細胞壁，細胞處於軟縮狀態。液泡縮小，細胞膜被扯離細胞壁（質壁分離）。';
+                if (overlay) overlay.textContent = '⚠️ 水分子持續淨流出細胞 (內部高水勢 ➔ 外界低水勢)';
+
+                if (statFlow) {
+                    statFlow.textContent = '淨流出 ➔ 細胞外';
+                    statFlow.className = 'text-amber-600 text-sm font-bold';
+                }
+                if (statState) {
+                    statState.textContent = '軟縮，呈現質壁分離';
+                    statState.className = 'text-amber-600 text-sm font-bold';
+                }
+                if (slider) slider.className = 'w-full h-2.5 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-amber-600 focus:outline-none';
+            }
+        }
+
+        initParticles();
+        onSliderChange(0.00);
+
+        // 繪製微彎自然不規則多邊形細胞壁（擬真生物課本風格）
+        function drawIrregularCellWall(cx, cy, w, h, pathOnly = false) {
+            const points = [
+                {x: cx - w*0.48, y: cy - h*0.38},
+                {x: cx - w*0.15, y: cy - h*0.48},
+                {x: cx + w*0.25, y: cy - h*0.46},
+                {x: cx + w*0.48, y: cy - h*0.35},
+                {x: cx + w*0.46, y: cy + h*0.15},
+                {x: cx + w*0.42, y: cy + h*0.44},
+                {x: cx + w*0.05, y: cy + h*0.47},
+                {x: cx - w*0.35, y: cy + h*0.45},
+                {x: cx - w*0.47, y: cy + h*0.20},
+                {x: cx - w*0.49, y: cy - h*0.15}
+            ];
+
+            ctx.beginPath();
+            ctx.moveTo((points[0].x + points[points.length-1].x)/2, (points[0].y + points[points.length-1].y)/2);
+
+            for(let i = 0; i < points.length; i++) {
+                let next = points[(i + 1) % points.length];
+                let midX = (points[i].x + next.x) / 2;
+                let midY = (points[i].y + next.y) / 2;
+                ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+            }
+            ctx.closePath();
+
+            if (!pathOnly) {
+                // 雙層課本綠/棕色柔化細胞壁
+                ctx.fillStyle = 'rgba(215, 227, 208, 0.45)';
+                ctx.fill();
+                ctx.strokeStyle = '#5a7850';
+                ctx.lineWidth = 4;
+                ctx.stroke();
+
+                ctx.strokeStyle = '#8bb178';
+                ctx.lineWidth = 1.8;
+                ctx.stroke();
+            }
+            return points;
+        }
+
+        // 繪製高滲時的星芒軟縮細胞膜（參照圖 3.15 右下）
+        function drawShrunkenMembranePath(cx, cy, w, h, plasmolysis) {
+            // 定義 8 個收縮節點與深深向內拉扯的凹陷點
+            const numSpikes = 8;
+            ctx.beginPath();
+            for (let i = 0; i < numSpikes; i++) {
+                let angle = (i / numSpikes) * Math.PI * 2;
+                
+                // 主節點外伸程度
+                let outerR = (w * 0.4) * (1 - plasmolysis * 0.45);
+                let x1 = cx + Math.cos(angle) * outerR * (0.8 + 0.3 * Math.cos(angle * 2));
+                let y1 = cy + Math.sin(angle) * (h * 0.4) * (1 - plasmolysis * 0.45) * (0.8 + 0.3 * Math.sin(angle * 2));
+
+                // 向內深度陷落拉扯點（呈現質壁分離星芒狀）
+                let midAngle = angle + (Math.PI / numSpikes);
+                let innerR = outerR * (1 - plasmolysis * 0.55);
+                let x2 = cx + Math.cos(midAngle) * innerR * 0.5;
+                let y2 = cy + Math.sin(midAngle) * (h * 0.35) * (1 - plasmolysis * 0.6) * 0.5;
+
+                if (i === 0) {
+                    ctx.moveTo(x1, y1);
+                } else {
+                    ctx.quadraticCurveTo((x1 + x2)/2, (y1 + y2)/2, x1, y1);
+                }
+                ctx.quadraticCurveTo(x2, y2, x1, y1);
+            }
+            ctx.closePath();
+        }
+
+        // 繪製水流動態指示箭頭 (青藍色)
+        function drawMovementArrows(cx, cy, wallW, wallH, mode) {
+            arrowOffset += 0.005;
+            if (arrowOffset >= 1.0) arrowOffset = 0.0;
+
+            const arrowColor = '#06b6d4';
+            ctx.strokeStyle = arrowColor;
+            ctx.fillStyle = arrowColor;
+            ctx.lineWidth = 2.5;
+
+            const tracks = [
+                { outerX: cx - wallW*0.2, outerY: cy - wallH/2 - 35, innerX: cx - wallW*0.15, innerY: cy - wallH/2 + 20 },
+                { outerX: cx + wallW*0.25, outerY: cy + wallH/2 + 35, innerX: cx + wallW*0.18, innerY: cy + wallH/2 - 20 },
+                { outerX: cx - wallW/2 - 35, outerY: cy + 10, innerX: cx - wallW/2 + 25, innerY: cy + 10 },
+                { outerX: cx + wallW/2 + 35, outerY: cy - 10, innerX: cx + wallW/2 - 25, innerY: cy - 10 }
+            ];
+
+            tracks.forEach(t => {
+                if (mode === 'balanced') {
+                    // 等滲狀態：無淨移動靜態雙向箭頭
+                    ctx.beginPath();
+                    ctx.arc((t.outerX+t.innerX)/2, (t.outerY+t.innerY)/2, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    return;
+                }
+
+                let startPt = mode === 'in' ? {x: t.outerX, y: t.outerY} : {x: t.innerX, y: t.innerY};
+                let endPt = mode === 'in' ? {x: t.innerX, y: t.innerY} : {x: t.outerX, y: t.outerY};
+
+                for (let i = 0; i < 2; i++) {
+                    let phase = (arrowOffset + i * 0.5) % 1.0;
+                    let headX = startPt.x + (endPt.x - startPt.x) * phase;
+                    let headY = startPt.y + (endPt.y - startPt.y) * phase;
+
+                    let angle = Math.atan2(endPt.y - startPt.y, endPt.x - startPt.x);
+                    let tailX = headX - 18 * Math.cos(angle);
+                    let tailY = headY - 18 * Math.sin(angle);
+
+                    ctx.beginPath();
+                    ctx.moveTo(tailX, tailY);
+                    ctx.lineTo(headX, headY);
+                    ctx.stroke();
+
+                    const headLen = 7;
+                    ctx.beginPath();
+                    ctx.moveTo(headX, headY);
+                    ctx.lineTo(headX - headLen * Math.cos(angle - Math.PI / 6), headY - headLen * Math.sin(angle - Math.PI / 6));
+                    ctx.lineTo(headX - headLen * Math.cos(angle + Math.PI / 6), headY - headLen * Math.sin(angle + Math.PI / 6));
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            });
+        }
+
+        // 動畫繪製主循環
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+
+            // 背景：柔和深灰顯微鏡背景
+            ctx.fillStyle = '#111827';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const wallW = 340;
+            const wallH = 200;
+
+            let plasmolysis = 0.0;
+            if (currentConc > 0.30) {
+                plasmolysis = (currentConc - 0.30) / 0.20;
+            }
+
+            // 1. 蔗糖粒子 (S)
+            sucroseParticles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+
+                if (Math.abs(p.x - cx) < (wallW/2 - 10) && Math.abs(p.y - cy) < (wallH/2 - 10)) {
+                    p.vx *= -1;
+                    p.vy *= -1;
+                    p.x += p.vx * 2;
+                    p.y += p.vy * 2;
+                }
+
+                if (p.x < 15 || p.x > canvas.width - 15) p.vx *= -1;
+                if (p.y < 15 || p.y > canvas.height - 15) p.vy *= -1;
+
+                ctx.fillStyle = '#f59e0b';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // 2. 水分子 (H2O)
+            waterParticles.forEach(p => {
+                let driftX = (Math.random() - 0.5) * 1.5;
+                let driftY = (Math.random() - 0.5) * 1.5;
+
+                if (currentConc < 0.20) {
+                    let dx = cx - p.x;
+                    let dy = cy - p.y;
+                    let dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist > 20) { driftX += (dx/dist)*0.6; driftY += (dy/dist)*0.6; }
+                } else if (currentConc > 0.30) {
+                    let dx = p.x - cx;
+                    let dy = p.y - cy;
+                    let dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist < 240) { driftX += (dx/dist)*0.7; driftY += (dy/dist)*0.7; }
+                }
+
+                p.vx = p.vx * 0.85 + driftX * 0.15;
+                p.vy = p.vy * 0.85 + driftY * 0.15;
+                p.x += p.vx;
+                p.y += p.vy;
+
+                if (p.x < 10) p.x = canvas.width - 10;
+                if (p.x > canvas.width - 10) p.x = 10;
+                if (p.y < 10) p.y = canvas.height - 10;
+                if (p.y > canvas.height - 10) p.y = 10;
+
+                ctx.fillStyle = '#38bdf8';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // 3. 繪製微彎不規則細胞壁
+            drawIrregularCellWall(cx, cy, wallW, wallH);
+
+            // 4. 繪製細胞膜與細胞質 (課本柔和黃綠色)
+            ctx.save();
+            if (plasmolysis > 0.05) {
+                // 高滲：軟縮凹陷的質壁分離細胞膜
+                drawShrunkenMembranePath(cx, cy, wallW, wallH, plasmolysis);
+            } else {
+                // 低滲/等滲：緊貼細胞壁內側
+                drawIrregularCellWall(cx, cy, wallW - 8, wallH - 8, true);
+            }
+
+            // 課本色調：淡橄欖黃綠色細胞質
+            ctx.fillStyle = 'rgba(180, 205, 130, 0.9)';
+            ctx.fill();
+            ctx.strokeStyle = '#557224'; // 柔和細緻細胞膜線條
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // 5. 葉綠體顆粒
+            const numGreenDots = 7;
+            for(let i = 0; i < numGreenDots; i++) {
+                let ang = (i / numGreenDots) * Math.PI * 2;
+                let scale = 1 - plasmolysis * 0.4;
+                let gx = cx + Math.cos(ang) * (wallW * 0.35 * scale);
+                let gy = cy + Math.sin(ang) * (wallH * 0.30 * scale);
+
+                ctx.fillStyle = '#3a6611';
+                ctx.beginPath();
+                ctx.ellipse(gx, gy, 5.5, 3.2, ang, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // 6. 繪製大型液泡 (課本藍色)
+            let vacW, vacH;
+            if (currentConc < 0.20) {
+                // 低滲：液泡膨大撐開細胞質
+                const turgorRatio = (0.20 - currentConc) / 0.20;
+                vacW = 210 + turgorRatio * 30;
+                vacH = 120 + turgorRatio * 15;
+            } else if (currentConc <= 0.30) {
+                // 等滲：正常大小
+                vacW = 200;
+                vacH = 110;
+            } else {
+                // 高滲：劇烈萎縮
+                vacW = 200 - plasmolysis * 135;
+                vacH = 110 - plasmolysis * 75;
+            }
+
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, Math.max(8, vacW/2), Math.max(5, vacH/2), 0, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(165, 205, 235, 0.85)';
+            ctx.fill();
+            ctx.strokeStyle = '#3b7ea1';
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+
+            // 7. 紫色細胞核
+            let nucX = cx - (vacW * 0.35 + 10);
+            let nucY = cy - (vacH * 0.25 + 5);
+            ctx.fillStyle = '#9333ea';
+            ctx.beginPath();
+            ctx.arc(nucX, nucY, 8.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+
+            // 8. 課本圖例標籤與指標線 (Textbook Labels)
+            ctx.font = '11px sans-serif';
+            ctx.fillStyle = '#e2e8f0';
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 1;
+
+            // 細胞壁標籤
+            ctx.beginPath();
+            ctx.moveTo(cx - wallW*0.4, cy - wallH*0.45);
+            ctx.lineTo(cx - wallW*0.4 - 30, cy - wallH*0.45 - 20);
+            ctx.stroke();
+            ctx.fillText('細胞壁', cx - wallW*0.4 - 70, cy - wallH*0.45 - 22);
+
+            // 液泡標籤
+            if (vacW > 40) {
+                ctx.beginPath();
+                ctx.moveTo(cx + 10, cy + 10);
+                ctx.lineTo(cx + 65, cy + 50);
+                ctx.stroke();
+                ctx.fillText('液泡', cx + 70, cy + 54);
+            }
+
+            // 質壁分離標籤
+            if (plasmolysis > 0.3) {
+                ctx.fillStyle = '#fde047';
+                ctx.strokeStyle = '#fde047';
+                ctx.beginPath();
+                ctx.moveTo(cx - wallW*0.3, cy + wallH*0.2);
+                ctx.lineTo(cx - wallW*0.35 - 15, cy + wallH*0.4);
+                ctx.stroke();
+                ctx.fillText('細胞膜被扯離細胞壁 (質壁分離)', cx - wallW*0.35 - 90, cy + wallH*0.4 + 15);
+            }
+
+            // 9. 水流動畫箭頭
+            const flowMode = currentConc < 0.20 ? 'in' : (currentConc > 0.30 ? 'out' : 'balanced');
+            drawMovementArrows(cx, cy, wallW, wallH, flowMode);
+
+            requestAnimationFrame(animate);
+        }
+
+        window.onload = function() {
+            animate();
+        };
+    </script>
+</body>
+</html>
